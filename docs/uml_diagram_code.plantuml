@@ -1,0 +1,158 @@
+@startuml
+allowmixing
+title Mixed Manifold Detector - Arquitectura General
+
+' === AJUSTES DE DISTRIBUCIÓN ===
+' 'left to right direction' HA SIDO ELIMINADO PARA PERMITIR UN LAYOUT MANUAL
+skinparam linetype ortho
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+
+skinparam package {
+    BackgroundColor #F9F9F9
+    BorderColor #AAAAAA
+}
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #2E86C1
+    FontColor #2E4053
+}
+skinparam component {
+    BackgroundColor #FDF5E6
+    BorderColor #CA6F1E
+}
+skinparam artifact {
+    BackgroundColor #EBF5FB
+    BorderColor #5DADE2
+}
+
+' === ESTRUCTURA PRINCIPAL ===
+
+' --- PAQUETES COLUMNA DERECHA ---
+package "data" {
+    artifact "mnist_train.csv"
+    artifact "mnist_test.csv"
+    artifact "fashion_mnist_train.csv"
+    artifact "fashion_mnist_test.csv"
+    artifact "cifar10_train.csv"
+    artifact "cifar10_test.csv"
+}
+
+package "src" {
+    package "models" {
+        class Autoencoder {
+            - encoder
+            - decoder
+            + forward()
+            + encode()
+            + decode()
+        }
+
+        class LinearAutoencoder {
+            + fit()
+            + transform()
+            + fit_transform()
+        }
+
+        class LinearSparseAutoencoder {
+            + fit()
+            + transform()
+            + fit_transform()
+        }
+
+        class DenoisingSparseAutoencoder {
+            + fit()
+            + transform()
+            + fit_transform()
+        }
+
+        Autoencoder <|-- LinearAutoencoder
+        Autoencoder <|-- LinearSparseAutoencoder
+        Autoencoder <|-- DenoisingSparseAutoencoder
+    }
+
+    package "core" {
+        class MixedManifoldDetector {
+            - _get_model()
+            + train()
+            + evaluate()
+            + detect()
+        }
+    }
+}
+
+' 'utils' AHORA ESTÁ FUERA DE 'src', COMO EN TU IMAGEN
+package "utils" {
+    class io {
+        + save_detector()
+        + load_detector()
+        + save_experiment()
+    }
+}
+
+' --- PAQUETES COLUMNA IZQUIERDA ---
+package "artifacts" {
+    package "models" {
+        artifact "detector_cifar10_train.pkl"
+        artifact "detector_fashion_mnist_train.pkl"
+        artifact "detector_mnist_train.pkl"
+    }
+
+    package "metrics" {
+        artifact "metrics_output.csv"
+    }
+}
+
+package "tests" {
+    component "test_linear_autoencoder.py"
+    component "test_linear_sparse_autoencoder.py"
+    component "test_denoise_sparse_autoencoder.py"
+}
+
+
+' === SCRIPT PRINCIPAL (COLUMNA DERECHA, ABAJO) ===
+component "mixed_manifold_detector.py" as MainScript
+
+
+' === RELACIONES (Ajustadas al nuevo layout) ===
+
+' Relaciones INTERNAS de 'src' (de core a models)
+' Usamos .down.> (punteado) para que sea menos prominente
+MixedManifoldDetector .down.> LinearAutoencoder : usa
+MixedManifoldDetector .down.> LinearSparseAutoencoder : usa
+MixedManifoldDetector .down.> DenoisingSparseAutoencoder : usa
+
+' Relación de 'src' a 'utils' (ahora están uno encima del otro)
+MixedManifoldDetector -down-> io : usa
+
+' Relación del Script Principal (abajo) a 'src' (arriba)
+MainScript -up-> MixedManifoldDetector
+
+' Relaciones de 'tests' (izquierda) a 'src' (derecha)
+"test_linear_autoencoder.py" -right-> MixedManifoldDetector
+"test_linear_sparse_autoencoder.py" -right-> MixedManifoldDetector
+"test_denoise_sparse_autoencoder.py" -right-> MixedManifoldDetector
+
+' Relaciones de 'src' (derecha) a 'data' (arriba-derecha) y 'artifacts' (izquierda)
+MixedManifoldDetector -up-> "data" : carga datos
+MixedManifoldDetector -left-> "artifacts/models" : guarda modelos
+MixedManifoldDetector -left-> "artifacts/metrics" : guarda métricas
+
+
+' === FORZAR DISEÑO (Layout Forcing) ===
+' Este es el truco: creamos enlaces invisibles para ordenar los paquetes
+
+' 1. Ordenar verticalmente la Columna Izquierda
+artifacts -[hidden]down- tests
+
+' 2. Ordenar verticalmente la Columna Derecha
+data -[hidden]down- src
+src -[hidden]down- utils
+utils -[hidden]down- MainScript
+
+' 3. Separar las dos columnas
+' Colocamos 'data' a la derecha de 'artifacts' y 'src' a la derecha de 'tests'
+artifacts -[hidden]right- data
+tests -[hidden]right- src
+
+@enduml
