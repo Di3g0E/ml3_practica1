@@ -1,10 +1,6 @@
-
-import numpy as np
-import torch
-from .autoencoder import Autoencoder
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+
+from .autoencoder import Autoencoder
 
 
 class LinearAutoencoder(Autoencoder):
@@ -16,11 +12,10 @@ class LinearAutoencoder(Autoencoder):
         """
         Constructor con parámetros de entrenamiento.
         """
-        super().__init__(**kwargs) # Inicialización del módulo base nn.Module
+        super().__init__(**kwargs) 
         
         self.embedding_dim = 32
 
-        # Capas del Encoder (D -> 32)
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, 256),  # Capa L1
             nn.ReLU(),
@@ -29,7 +24,6 @@ class LinearAutoencoder(Autoencoder):
             nn.Linear(128, self.embedding_dim) # Capa L3 (Embedding)
         )
 
-        # Capas del Decoder (32 -> D)
         self.decoder = nn.Sequential(
             nn.Linear(self.embedding_dim, 128), # Capa L4
             nn.ReLU(),
@@ -37,6 +31,8 @@ class LinearAutoencoder(Autoencoder):
             nn.ReLU(),
             nn.Linear(256, input_dim)      # Capa de salida L6
         )
+        
+        self.to(self.device)
 
     def forward(self, x):
         """

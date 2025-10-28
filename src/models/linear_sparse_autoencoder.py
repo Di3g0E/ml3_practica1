@@ -1,94 +1,110 @@
-
-import numpy as np
 import torch
-from .autoencoder import Autoencoder
 import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+
+from .autoencoder import Autoencoder
 
 
 class LinearSparseAutoencoder(Autoencoder):
     """
-    Wrapper para el modelo _InternalAE que implementa la interfaz requerida por MixedManifoldDetector.
+    Implementa un Autoencoder Lineal con regularización L1 (Sparsity).
+    Hereda de Autoencoder y sobreescribe el método 'fit' para añadir la penalización L1 a la función de pérdida.
     """
 
-    def __init__(self, epochs=100, lr=0.001, error_threshold=0.001, batch_size=32, sparsity_weight=1e-3):
+    def __init__(self, input_dim: int, **kwargs):
         """
         Constructor con parámetros de entrenamiento.
-        Args:
-            epochs (int): Número de epochs para el entrenamiento.
-            lr (float): Learning rate para el optimizador.
-            error_threshold (float): Umbral de error para detener el entrenamiento.
-            batch_size (int): Tamaño de los batches para el DataLoader.
-            sparsity_weight (float): Peso de la regularización L1 (sparse).
         """
-        super(LinearSparseAutoencoder, self).__init__() # Inicialización del módulo base nn.Module
-
-        self.epochs = epochs
-        self.lr = lr
-        self.error_threshold = error_threshold
-        self.batch_size = batch_size
-        self.sparsity_weight = sparsity_weight
+        super().__init__(**kwargs) 
         
-        # Selecciona GPU si está disponible
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = None
+        self.embedding_dim = 32
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 256),  # Capa L1
+            nn.ReLU(),
+            nn.Linear(256, 128),        # Capa L2
+            nn.ReLU(),
+            nn.Linear(128, self.embedding_dim) # Capa L3 (Embedding)
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(self.embedding_dim, 128), # Capa L4
+            nn.ReLU(),
+            nn.Linear(128, 256),           # Capa L5
+            nn.ReLU(),
+            nn.Linear(256, input_dim)      # Capa de salida L6
+        )
+
+        self.to(self.device)
 
     def fit(self, data: np.ndarray):
         """
         Recibe datos NumPy y entrena el modelo de PyTorch.
-        Args:
-            data (np.ndarray): Datos de entrenamiento en formato NumPy.
+        (Copiado de la clase base 'Autoencoder' y modificado para añadir 'sparsity')
         """
-        if data.ndim != 2:
-            raise ValueError(f"Los datos de entrada deben ser 2D (samples, features), "
-                             f"pero se recibió {data.shape}")
-        
-        n_samples, input_dim = data.shape
-        print(f"Iniciando 'fit' en datos con forma: ({n_samples}, {input_dim})")
-        
-        # 1. Inicializar el modelo interno y moverlo al dispositivo
-        self.model = Autoencoder(input_dim=input_dim, embedding_dim=32).to(self.device)
-        self.model.train() # Poner el modelo en modo entrenamiento
+        # Configurar pérdida y optimizador
+        criterion = nn.MSELoss() # Error Cuadrático Medio
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
 
-        # 2. Configurar datos (convertir NumPy a Tensors de PyTorch)
-        data_array = data.values.astype(np.float32) # Convierte el DataFrame a numpy porque PyTorch no acepta DataFrames directamente como tensor
-        dataset = TensorDataset(torch.tensor(data_array, dtype=torch.float32, device=self.device))
+        # Configurar datos (convertir NumPy a Tensors de PyTorch)
+        dataset = TensorDataset(torch.tensor(data.values, dtype=torch.float32, device=self.device))
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        # 3. Configurar pérdida y optimizador
-        criterion = nn.MSELoss() # Error Cuadrático Medio
-        optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+        self.train()
 
-        # 4. Bucle de entrenamiento
+        # Bucle de entrenamiento
         for epoch in range(self.epochs):
             total_loss = 0
             for batch_data in loader:
-                # El loader devuelve una lista, tomamos el primer (y único) tensor
                 batch = batch_data[0].to(self.device)
-                
+                                
                 # Forward pass
-                reconstructed = self.model(batch)
-                loss = criterion(reconstructed, batch)
+                encoded = self.encoder(batch)
+                reconstructed = self.decoder(encoded)
                 
+                # Calcular pérdida MSE
+                mse_loss = criterion(reconstructed, batch)
+                l1_penalty = self.sparsity_weight * torch.sum(torch.abs(encoded))
+                loss = mse_loss + l1_penalty
+                                
                 # Backward pass y optimización
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 
-                total_loss += (loss.item() + self.sparsity_weight * torch.sum(torch.abs(self.model.encode(batch))).item()) # Agregar término de regularización L1
+                total_loss += loss.item()
             
             # Calcular pérdida promedio de la época
             avg_loss = total_loss / len(loader)
             
             # Mostrar progreso cada 10 epochs
             if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch + 1}/{self.epochs}], Pérdida (MSE): {avg_loss:.6f}')
+                print(f'Epoch [{epoch + 1}/{self.epochs}], Pérdida (MSE+L1): {avg_loss:.6f}')
 
             # Comprobar umbral de error para parada temprana
             if avg_loss <= self.error_threshold:
                 print(f'Umbral de error alcanzado. Deteniendo entrenamiento en epoch {epoch+1}.')
                 break
-                
+
+            self.is_trained = True
     
+    def forward(self, x):
+        """
+        Paso 'forward' completo: codifica y luego decodifica.
+        """
+        encoded = self.encoder(x)
+        return self.decoder(encoded)
+    
+    def encode(self, x):
+        """
+        Método separado para usar solo el encoder (para 'transform').
+        """
+        return self.encoder(x)
+    
+    def decode(self, z):
+        """
+        Método separado para usar solo el decoder.
+        """
+        return self.decoder(z)
     

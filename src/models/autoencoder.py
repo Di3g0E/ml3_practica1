@@ -1,13 +1,11 @@
 import torch
 import torch.nn as nn
-import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
+import numpy as np
 
 class Autoencoder(nn.Module):
     """
-    Define la arquitectura del Autoencoder Lineal.
-    Encoder: 3 capas (D -> 256 -> 128 -> 32)
-    Decoder: 3 capas (32 -> 128 -> 256 -> D)
+    Clase base abstracta (hereda de nn.Module) que define la interfaz y el bucle de entrenamiento genérico (`fit`) para todos los modelos de autoencoder del proyecto.
     """
     def __init__(self, epochs=100, error_threshold=0.001, batch_size=32, lr=0.001, embedding_dim=32, sparsity_weight=1e-3, noise_weight=0.3):
         super(Autoencoder, self).__init__() # Inicialización del módulo base nn.Module
@@ -23,7 +21,6 @@ class Autoencoder(nn.Module):
         # Selecciona GPU si está disponible
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.model = None
         self.is_trained = False
 
     def fit(self, data: np.ndarray):
@@ -32,32 +29,24 @@ class Autoencoder(nn.Module):
         Args:
             data (np.ndarray): Datos de entrenamiento en formato NumPy.
         """
-        if self.model is None:
-            raise NotImplementedError("El modelo (self.model) no se ha definido.")
-
-        _, input_dim = data.shape
-
          # Configurar pérdida y optimizador
         criterion = nn.MSELoss() # Error Cuadrático Medio
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
 
         # Configurar datos (convertir NumPy a Tensors de PyTorch)
-        # data_array = data.values.astype(np.float32) # Convierte el DataFrame a numpy porque PyTorch no acepta DataFrames directamente como tensor
-        dataset = TensorDataset(torch.tensor(data, dtype=torch.float32, device=self.device))
+        dataset = TensorDataset(torch.tensor(data.values, dtype=torch.float32, device=self.device))
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        # Poner el modelo en modo entrenamiento
-        self.model.train()
+        self.train()
 
         # Bucle de entrenamiento
         for epoch in range(self.epochs):
             total_loss = 0
             for batch_data in loader:
-                # El loader devuelve una lista, tomamos el primer (y único) tensor
                 batch = batch_data[0].to(self.device)
                 
                 # Forward pass
-                reconstructed = self.model(batch)
+                reconstructed = self(batch)
                 loss = criterion(reconstructed, batch)
                 
                 # Backward pass y optimización
@@ -96,8 +85,7 @@ class Autoencoder(nn.Module):
         self.eval()
         
         with torch.no_grad():
-            # data_array = data.values.astype(np.float32)
-            data_tensor = torch.tensor(data, dtype=torch.float32, device=self.device)
+            data_tensor = torch.tensor(data.values, dtype=torch.float32, device=self.device)
             embeddings = self.encoder(data_tensor)
             
         return embeddings.cpu().numpy()

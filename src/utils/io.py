@@ -31,7 +31,7 @@ def save_experiment(csv_path, experiment_name,
         df = pd.concat([df_existing, df], ignore_index=True)
     df.to_csv(csv_path, index=False)
 
-def load_dataset_csv(path, train="mnist_train.csv", test=None, sample_fraction=None):
+def load_dataset_csv(path='./data/', train="mnist_train.csv", test=None, sample_fraction=None):
     """Carga un dataset desde un archivo CSV.
     
     Args:
@@ -43,13 +43,13 @@ def load_dataset_csv(path, train="mnist_train.csv", test=None, sample_fraction=N
         tuple: (labels, features) donde labels es un array de etiquetas y features es un array de características.
     """
     # Si no existe el archivo, lanzar error
-    if not os.path.exists('./data/' + train):
-        print(f"El archivo {train} no existe en la carpeta './data/'.")
+    if not os.path.exists(path + train):
+        print(f"El archivo {train} no existe en la carpeta {path}.")
         sys.exit(1)
         
-    train_df = pd.read_csv('./data/' + train)
+    train_df = pd.read_csv(path + train)
     if test:
-        test_df = pd.read_csv('./data/' + test)
+        test_df = pd.read_csv(path + test)
 
     if sample_fraction is not None and 0 < sample_fraction < 1:
         train_df = train_df.sample(frac=sample_fraction, random_state=42).reset_index(drop=True)
